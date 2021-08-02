@@ -386,10 +386,10 @@ function storeMappingPair(
       return;
   }
 
-  var endPosition = valueNode ? valueNode.endPosition : keyNode.endPosition+1; // FIXME.workaround should be position of ':' indeed
+  var endPosition = valueNode ? valueNode.endPosition : keyNode.endPosition;
 
-  if (!valueNode && state.input.charAt(endPosition-1) !== ':') {
-    endPosition--; // for key without ':'
+  if (!valueNode && state.input.charAt(endPosition) === ':') {
+    endPosition++;
   }
 
   if (null === _result) {
