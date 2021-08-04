@@ -2,6 +2,7 @@ import * as YAML from '../src/'
 import { AbstractVisitor } from './visitor'
 
 import * as chai from 'chai'
+import { YamlMap, YAMLMapping } from '../src/';
 const assert = chai.assert
 
 function structure(node) {
@@ -34,6 +35,35 @@ inner:
         const doc1 = YAML.load(input);
         assert.deepEqual(doc1.endPosition,input.length);
     });
+});
+
+suite('Fault toleracy', () => {
+  test('should work with invalid multi-line key', function () {
+    const input = `whatever: true
+test
+foo: bar`;
+    const doc = YAML.safeLoad(input) as YamlMap;
+    assert.lengthOf(doc.mappings, 3);
+    assert.equal((doc.mappings[1] as YAMLMapping).value, null);
+    assert.deepEqual(
+      {
+        ...(doc.mappings[1] as YAMLMapping).key,
+        parent: null,
+      },
+      {
+        doubleQuoted: false,
+        endPosition: 19,
+        errors: [],
+        kind: 0,
+        parent: null,
+        plainScalar: true,
+        rawValue: 'test',
+        startPosition: 15,
+        value: 'test',
+      }
+    );
+    assert.lengthOf(doc.errors, 1, `Found error(s): ${doc.errors.toString()} when expecting none.`);
+  });
 });
 
 suite('Loading multiple documents', () => {

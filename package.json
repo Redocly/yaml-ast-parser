@@ -3,7 +3,7 @@
   "version": "0.1.2",
   "main": "dist/src/index.js",
   "scripts": {
-    "build": "rimraf dist && tsc",
+    "build": "rm -rf dist && tsc",
     "test": "npm run build && mocha --ui tdd dist/test",
     "watch": "tsc --watch"
   },

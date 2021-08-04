@@ -205,16 +205,16 @@ function throwErrorFromPosition(state, position: number, message, isWarning=fals
     }
 
     var hash = message + position;
-    
+
     if(state.errorMap[hash]) {
         return;
     }
-    
+
     var mark = new Mark(state.filename, state.input, position, line.line, (position - line.start));
     if(toLineEnd){
         mark.toLineEnd = true;
     }
-    
+
     var error = new YAMLException(message, mark, isWarning);
     state.errors.push(error);
 }
@@ -374,50 +374,50 @@ function mergeMappings(state:State, destination, source) {
   }
 }
 
-function storeMappingPair(state:State, _result:ast.YamlMap, keyTag, keyNode:ast.YAMLNode,
-                          valueNode:ast.YAMLNode):ast.YamlMap {
-  var index, quantity;
-    if (keyNode==null){
-        return;
-    }
-  //keyNode = String(keyNode);
+function storeMappingPair(
+  state:State,
+  _result:ast.YamlMap,
+  keyTag,
+  keyNode:ast.YAMLNode,
+  valueNode:ast.YAMLNode
+):ast.YamlMap {
+
+  if (keyNode==null){
+      return;
+  }
+
+  var endPosition = valueNode ? valueNode.endPosition : keyNode.endPosition;
+
+  if (!valueNode && state.input.charAt(endPosition) === ':') {
+    endPosition++;
+  }
 
   if (null === _result) {
     _result = {
-        startPosition:keyNode.startPosition,
-        endPosition:valueNode.endPosition,
-        parent:null,
-        errors:[],
-        mappings: [],kind:ast.Kind.MAP};
+      startPosition:keyNode.startPosition,
+      endPosition: endPosition,
+      parent:null,
+      errors:[],
+      mappings: [],kind:ast.Kind.MAP
+    };
+  }
+  var mapping=ast.newMapping(<ast.YAMLNode>keyNode,valueNode);
+  mapping.parent=_result;
+  keyNode.parent=mapping;
+
+  if (valueNode!=null) {
+      valueNode.parent = mapping;
   }
 
-  // if ('tag:yaml.org,2002:merge' === keyTag) {
-  //   if (Array.isArray(valueNode)) {
-  //    for (index = 0, quantity = (<any>valueNode).length; index < quantity; index += 1) {
-  //      mergeMappings(state, _result, valueNode[index]);
-  //    }
-  //   } else {
-  //    mergeMappings(state, _result, valueNode);
-  //   }
-  // } else {
-
-       var mapping=ast.newMapping(<ast.YAMLNode>keyNode,valueNode);
-       mapping.parent=_result;
-       keyNode.parent=mapping;
-      if (valueNode!=null) {
-          valueNode.parent = mapping;
+  !state.ignoreDuplicateKeys && _result.mappings.forEach(sibling => {
+      if(ast.isNodesEqual(sibling, mapping)) {
+          throwErrorFromPosition(state, mapping.key.startPosition, 'duplicate key');
+          throwErrorFromPosition(state, sibling.key.startPosition, 'duplicate key');
       }
-    
-    !state.ignoreDuplicateKeys && _result.mappings.forEach(sibling => {
-        if(ast.isNodesEqual(sibling, mapping)) {
-            throwErrorFromPosition(state, mapping.key.startPosition, 'duplicate key');
-            throwErrorFromPosition(state, sibling.key.startPosition, 'duplicate key');
-        }
-    });
-        
-      _result.mappings.push(mapping)
-    _result.endPosition=valueNode? valueNode.endPosition : keyNode.endPosition+1; //FIXME.workaround should be position of ':' indeed
-  // }
+  });
+
+  _result.mappings.push(mapping)
+  _result.endPosition = endPosition;
 
   return _result;
 }
@@ -440,7 +440,7 @@ function readLineBreak(state:State) {
 
   state.line += 1;
   state.lineStart = state.position;
-    
+
     state.lines.push({
         start: state.lineStart,
         line: state.line
@@ -454,12 +454,12 @@ class Line {
 
 function positionToLine(state: State, position: number): Line {
     var line: Line;
-    
+
     for(var i = 0; i < state.lines.length; i++) {
         if(state.lines[i].start > position) {
             break;
         }
-        
+
         line = state.lines[i];
     }
 
@@ -469,7 +469,7 @@ function positionToLine(state: State, position: number): Line {
             line: 0
         }
     }
-    
+
     return line;
 }
 
@@ -1237,7 +1237,11 @@ function readBlockMapping(state:State, nodeIndent, flowIndent) {
         }
 
       } else if (detected) {
+
         throwError(state, 'can not read a block mapping entry; a multiline key may not be an implicit key');
+        // storeMappingPair(state, _result, keyTag, keyNode, valueNode);
+
+        // move to the beginning of the second line (fault tolerance)
         while (state.position>0){
             ch = state.input.charCodeAt(--state.position);
             if (is_EOL(ch)){
@@ -1245,6 +1249,12 @@ function readBlockMapping(state:State, nodeIndent, flowIndent) {
                 break;
             }
         }
+        keyNode = state.result;
+
+        keyNode.value = state.input.substring(state.result.startPosition, state.position - 1);
+        keyNode.rawValue = keyNode.value;
+        keyNode.endPosition = state.position - 1;
+        storeMappingPair(state, _result, keyTag, keyNode, null);
       } else {
         state.tag = _tag;
         state.anchor = _anchor;
