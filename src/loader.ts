@@ -684,12 +684,10 @@ function readSingleQuotedScalar(state:State, nodeIndent) {
   captureStart = captureEnd = state.position;
 
   while (0 !== (ch = state.input.charCodeAt(state.position))) {
-      //console.log('ch: <' + String.fromCharCode(ch) + '>');
       if (0x27/* ' */ === ch) {
         captureSegment(state, captureStart, state.position, true);
         ch = state.input.charCodeAt(++state.position);
 
-      //console.log('next: <' + String.fromCharCode(ch) + '>');
           scalar.endPosition=state.position;
           if (0x27/* ' */ === ch) {
           captureStart = captureEnd = state.position;
@@ -1090,9 +1088,7 @@ function readBlockSequence(state:State, nodeIndent) {
   }
   _result.startPosition=state.position;
   ch = state.input.charCodeAt(state.position);
-
   while (0 !== ch) {
-
     if (0x2D/* - */ !== ch) {
       break;
     }
@@ -1120,6 +1116,7 @@ function readBlockSequence(state:State, nodeIndent) {
       state.result.parent = _result;
       _result.items.push(state.result);
     }
+    _result.endPosition = state?.result?.endPosition || state.position;
     skipSeparationSpace(state, true, -1);
 
     ch = state.input.charCodeAt(state.position);
@@ -1130,15 +1127,14 @@ function readBlockSequence(state:State, nodeIndent) {
       break;
     }
   }
-  _result.endPosition=state.position
   if (detected) {
     state.tag = _tag;
     state.anchor = _anchor;
     state.kind = 'sequence';
     state.result = _result;
-    _result.endPosition=state.position;
     return true;
   }
+  _result.endPosition=state.position
   return false;
 }
 
@@ -1287,7 +1283,9 @@ function readBlockMapping(state:State, nodeIndent, flowIndent) {
     }
 
     if (state.lineIndent > nodeIndent && (0 !== ch)) {
-      throwError(state, 'bad indentation of a mapping entry');
+        throwError(state, 'bad indentation of a mapping entry' + state.position);
+        ch = state.input.charCodeAt(++state.position);
+        skipSeparationSpace(state, true, -1);
     } else if (state.lineIndent < nodeIndent) {
       break;
     }
@@ -1513,7 +1511,6 @@ function composeNode(state:State, parentIndent, nodeContext, allowToSeek, allowC
   }
 
   let tagStart = state.position;
-  let tagColumn = state.position - state.lineStart;
   if (1 === indentStatus) {
     while (readTagProperty(state) || readAnchorProperty(state)) {
       if (skipSeparationSpace(state, true, -1)) {
