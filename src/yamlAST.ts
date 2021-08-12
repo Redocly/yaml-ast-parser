@@ -20,6 +20,7 @@ export interface YAMLDocument {
 export interface YAMLNode extends YAMLDocument {
     startPosition: number
     endPosition: number
+    nodeIndent: number
     kind: Kind
     anchorId?: string
     valueObject?: any
@@ -63,12 +64,13 @@ export interface YAMLSequence extends YAMLNode {
 export interface YamlMap extends YAMLNode {
     mappings: YAMLMapping[]
 }
-export function newMapping(key: YAMLNode, value: YAMLNode): YAMLMapping {
+export function newMapping(key: YAMLNode, value: YAMLNode, nodeIndent: number = 2): YAMLMapping {
     var end = (value ? value.endPosition : key.endPosition + 1); //FIXME.workaround, end should be defied by position of ':'
     //console.log('key: ' + key.value + ' ' + key.startPosition + '..' + key.endPosition + ' ' + value + ' end: ' + end);
     var node = {
         key: key,
         value: value,
+        nodeIndent,
         startPosition: key.startPosition,
         endPosition: end,
         kind: Kind.MAPPING,
@@ -77,23 +79,25 @@ export function newMapping(key: YAMLNode, value: YAMLNode): YAMLMapping {
     };
     return node
 }
-export function newAnchorRef(key: string, start: number, end: number, value: YAMLNode): YAMLAnchorReference {
+export function newAnchorRef(key: string, start: number, end: number, value: YAMLNode, nodeIndent: number = 2): YAMLAnchorReference {
     return {
         errors: [],
         referencesAnchor: key,
         value: value,
+        nodeIndent,
         startPosition: start,
         endPosition: end,
         kind: Kind.ANCHOR_REF,
         parent: null
     }
 }
-export function newScalar(v: string | boolean | number = ""): YAMLScalar {
+export function newScalar(v: string | boolean | number = "", nodeIndent: number = 2): YAMLScalar {
     const result: YAMLScalar = {
         errors: [],
         startPosition: -1,
         endPosition: -1,
         value: "" + v,
+        nodeIndent,
         kind: Kind.SCALAR,
         parent: null,
         doubleQuoted: false,
@@ -109,6 +113,7 @@ export function newItems(): YAMLSequence {
         errors: [],
         startPosition: -1,
         endPosition: -1,
+        nodeIndent: 2,
         items: [],
         kind: Kind.SEQ,
         parent: null
@@ -117,11 +122,12 @@ export function newItems(): YAMLSequence {
 export function newSeq(): YAMLSequence {
     return newItems();
 }
-export function newMap(mappings?: YAMLMapping[]): YamlMap {
+export function newMap(mappings?: YAMLMapping[], nodeIndent: number = 2,): YamlMap {
     return {
         errors: [],
         startPosition: -1,
         endPosition: -1,
+        nodeIndent,
         mappings: mappings ? mappings : [],
         kind: Kind.MAP,
         parent: null

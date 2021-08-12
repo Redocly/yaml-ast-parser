@@ -379,7 +379,8 @@ function storeMappingPair(
   _result:ast.YamlMap,
   keyTag,
   keyNode:ast.YAMLNode,
-  valueNode:ast.YAMLNode
+  valueNode:ast.YAMLNode,
+  nodeIndent: number
 ):ast.YamlMap {
 
   if (keyNode==null){
@@ -398,14 +399,16 @@ function storeMappingPair(
       endPosition: endPosition,
       parent:null,
       errors:[],
-      mappings: [],kind:ast.Kind.MAP
+      mappings: [],
+      kind: ast.Kind.MAP,
+      nodeIndent,
     };
   }
-  var mapping=ast.newMapping(<ast.YAMLNode>keyNode,valueNode);
-  mapping.parent=_result;
-  keyNode.parent=mapping;
+  var mapping = ast.newMapping(<ast.YAMLNode>keyNode, valueNode, nodeIndent);
+  mapping.parent = _result;
+  keyNode.parent = mapping;
 
-  if (valueNode!=null) {
+  if (valueNode != null) {
       valueNode.parent = mapping;
   }
 
@@ -473,7 +476,7 @@ function positionToLine(state: State, position: number): Line {
     return line;
 }
 
-function skipSeparationSpace(state:State, allowComments, checkIndent) {
+function skipSeparationSpace(state:State, allowComments, nodeIndent, toEndBlock = false) {
   var lineBreaks = 0,
       ch = state.input.charCodeAt(state.position);
 
@@ -492,6 +495,10 @@ function skipSeparationSpace(state:State, allowComments, checkIndent) {
     }
 
     if (is_EOL(ch)) {
+      if (toEndBlock && -1 !== nodeIndent && state.lineIndent < nodeIndent) {
+        state.position -= state.lineIndent;
+        break;
+      }
       readLineBreak(state);
 
       ch = state.input.charCodeAt(state.position);
@@ -507,7 +514,7 @@ function skipSeparationSpace(state:State, allowComments, checkIndent) {
     }
   }
 
-  if (-1 !== checkIndent && 0 !== lineBreaks && state.lineIndent < checkIndent) {
+  if (-1 !== nodeIndent && 0 !== lineBreaks && state.lineIndent < nodeIndent) {
     throwWarning(state, 'deficient indentation');
   }
 
@@ -559,7 +566,7 @@ function readPlainScalar(state:State, nodeIndent, withinFlowCollection) {
       _kind = state.kind,
       _result = state.result,
       ch;
-  var state_result=ast.newScalar();
+  var state_result = ast.newScalar('', nodeIndent);
   state_result.plainScalar=true;
   state.result=state_result;
   ch = state.input.charCodeAt(state.position);
@@ -674,11 +681,11 @@ function readSingleQuotedScalar(state:State, nodeIndent) {
   if (0x27/* ' */ !== ch) {
     return false;
   }
-  var scalar=ast.newScalar();
+  var scalar = ast.newScalar('', nodeIndent);
   scalar.singleQuoted=true;
   state.kind = 'scalar';
   state.result = scalar;
-    scalar.startPosition=state.position;
+  scalar.startPosition = state.position;
 
     state.position++;
   captureStart = captureEnd = state.position;
@@ -729,7 +736,7 @@ function readDoubleQuotedScalar(state:State, nodeIndent:number) {
   }
 
   state.kind = 'scalar';
-  var scalar=ast.newScalar();
+  var scalar = ast.newScalar('', nodeIndent);
   scalar.doubleQuoted=true;
   state.result = scalar;
     scalar.startPosition=state.position;
@@ -823,7 +830,7 @@ function readFlowCollection(state:State, nodeIndent) {
   } else if (ch === 0x7B/* { */) {
     terminator = 0x7D;/* } */
     isMapping = true;
-    _result = ast.newMap();
+    _result = ast.newMap(null, nodeIndent);
     _result.startPosition=state.position
   } else {
     return false;
@@ -885,9 +892,9 @@ function readFlowCollection(state:State, nodeIndent) {
     }
 
     if (isMapping) {
-      storeMappingPair(state, (<ast.YamlMap>_result), keyTag, keyNode, valueNode);
+      storeMappingPair(state, (<ast.YamlMap>_result), keyTag, keyNode, valueNode, nodeIndent);
     } else if (isPair) {
-        var mp=storeMappingPair(state, null, keyTag, keyNode, valueNode);
+        var mp = storeMappingPair(state, null, keyTag, keyNode, valueNode, nodeIndent);
         mp.parent=_result;
         (<ast.YAMLSequence>_result).items.push(mp);
     } else {
@@ -932,7 +939,7 @@ function readBlockScalar(state:State, nodeIndent) {
   } else {
     return false;
   }
-  var sc=ast.newScalar();
+  var sc = ast.newScalar('', nodeIndent);
   state.kind = 'scalar';
   state.result = sc;
   sc.startPosition=state.position
@@ -1116,8 +1123,9 @@ function readBlockSequence(state:State, nodeIndent) {
       state.result.parent = _result;
       _result.items.push(state.result);
     }
-    _result.endPosition = state?.result?.endPosition || state.position;
-    skipSeparationSpace(state, true, -1);
+
+    skipSeparationSpace(state, true, nodeIndent, true);
+    _result.endPosition = state.position - 1;
 
     ch = state.input.charCodeAt(state.position);
 
@@ -1144,7 +1152,7 @@ function readBlockMapping(state:State, nodeIndent, flowIndent) {
       _line,
       _tag          = state.tag,
       _anchor       = state.anchor,
-      _result       = ast.newMap(),
+      _result       = ast.newMap(null, nodeIndent),
       keyTag        = null,
       keyNode       = null,
       valueNode     = null,
@@ -1171,7 +1179,7 @@ function readBlockMapping(state:State, nodeIndent, flowIndent) {
 
       if (0x3F/* ? */ === ch) {
         if (atExplicitKey) {
-          storeMappingPair(state, _result, keyTag, keyNode, null);
+          storeMappingPair(state, _result, keyTag, keyNode, null, nodeIndent);
           keyTag = keyNode = valueNode = null;
         }
 
@@ -1211,7 +1219,7 @@ function readBlockMapping(state:State, nodeIndent, flowIndent) {
           }
 
           if (atExplicitKey) {
-            storeMappingPair(state, _result, keyTag, keyNode, null);
+            storeMappingPair(state, _result, keyTag, keyNode, null, nodeIndent);
             keyTag = keyNode = valueNode = null;
           }
 
@@ -1250,7 +1258,7 @@ function readBlockMapping(state:State, nodeIndent, flowIndent) {
         keyNode.value = state.input.substring(state.result.startPosition, state.position - 1);
         keyNode.rawValue = keyNode.value;
         keyNode.endPosition = state.position - 1;
-        storeMappingPair(state, _result, keyTag, keyNode, null);
+        storeMappingPair(state, _result, keyTag, keyNode, null, nodeIndent);
       } else {
         state.tag = _tag;
         state.anchor = _anchor;
@@ -1266,6 +1274,10 @@ function readBlockMapping(state:State, nodeIndent, flowIndent) {
     //
     if (state.line === _line || state.lineIndent > nodeIndent) {
       if (composeNode(state, nodeIndent, CONTEXT_BLOCK_OUT, true, allowCompact)) {
+        if (state.lineIndent && nodeIndent && state.lineIndent >= nodeIndent) {
+          skipSeparationSpace(state, true, nodeIndent, true);
+          state.result.endPosition = state.position - 1;
+        }
         if (atExplicitKey) {
           keyNode = state.result;
         } else {
@@ -1274,7 +1286,9 @@ function readBlockMapping(state:State, nodeIndent, flowIndent) {
       }
 
       if (!atExplicitKey) {
-        storeMappingPair(state, _result, keyTag, keyNode, valueNode);
+        if (keyNode?.endPosition) keyNode.endPosition = state.position - 1;
+        if (valueNode?.endPosition) valueNode.endPosition = state.position - 1;
+        storeMappingPair(state, _result, keyTag, keyNode, valueNode, nodeIndent);
         keyTag = keyNode = valueNode = null;
       }
 
@@ -1297,7 +1311,7 @@ function readBlockMapping(state:State, nodeIndent, flowIndent) {
 
   // Special case: last mapping's node contains only the key in explicit notation.
   if (atExplicitKey) {
-    storeMappingPair(state, _result, keyTag, keyNode, null);
+    storeMappingPair(state, _result, keyTag, keyNode, null, nodeIndent);
   }
 
   // Expose the resulting mapping.
@@ -1468,7 +1482,7 @@ function readAlias(state:State) {
     }
   }
 
-  state.result = ast.newAnchorRef(alias,_position,state.position,state.anchorMap[alias]);
+  state.result = ast.newAnchorRef(alias, _position, state.position, state.anchorMap[alias], 0);
   skipSeparationSpace(state, true, -1);
   return true;
 }
@@ -1585,7 +1599,7 @@ function composeNode(state:State, parentIndent, nodeContext, allowToSeek, allowC
   if (null !== state.tag && '!' !== state.tag) {
     if (state.tag=="!include"){
         if (!state.result){
-            state.result=ast.newScalar();
+            state.result = ast.newScalar('', blockIndent);
             state.result.startPosition=state.position;
             state.result.endPosition=state.position;
             throwError(state,"!include without value");
