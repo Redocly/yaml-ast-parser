@@ -55,6 +55,7 @@ foo: bar`;
         endPosition: 19,
         errors: [],
         kind: 0,
+        nodeIndent: 0,
         parent: null,
         plainScalar: true,
         rawValue: 'test',
@@ -63,6 +64,86 @@ foo: bar`;
       }
     );
     assert.lengthOf(doc.errors, 1, `Found error(s): ${doc.errors.toString()} when expecting none.`);
+  });
+
+  test('should work with invalid multi-line key in sequence', function () {
+    const input = `tags:
+  - email
+  n `;
+    const doc = YAML.safeLoad(input) as YamlMap;
+
+    const seq = YAML.newSeq();
+    seq.items = [YAML.newScalar('email')];
+    assert.lengthOf(doc.mappings, 1);
+    const expected_structure =
+            YAML.newMap(
+                [YAML.newMapping(
+                    YAML.newScalar('tags'),
+                    seq)]);
+    assert.deepEqual(structure(doc), expected_structure)
+    assert.lengthOf(doc.errors, 2, `Found error(s): ${doc.errors.toString()} when expecting none.`)
+  });
+
+  test('should not contain spaces', function () {
+    const input = `tags:
+  - email
+ 
+ 
+ 
+ 
+  `;
+    const doc = YAML.safeLoad(input) as YamlMap;
+
+    const seq = YAML.newSeq();
+    seq.items = [YAML.newScalar('email')];
+    assert.lengthOf(doc.mappings, 1);
+    const expected_structure =
+            YAML.newMap(
+                [YAML.newMapping(
+                    YAML.newScalar('tags'),
+                    seq)]);
+
+    assert.equal(doc.endPosition, input.length);
+    assert.equal(doc.mappings[0].startPosition, 0);
+    assert.equal(doc.mappings[0].endPosition, 15);
+
+    assert.deepEqual(structure(doc), expected_structure)
+    assert.lengthOf(doc.errors, 0)
+  });
+
+  test('should not contain spaces between items', function () {
+    const input = `tags:
+  - email
+ 
+ 
+newTags:
+  - user
+  `;
+    const doc = YAML.safeLoad(input) as YamlMap;
+
+    assert.equal(doc.endPosition, input.length);
+    assert.isTrue(doc.mappings[0].endPosition < doc.mappings[1].startPosition);
+
+    assert.lengthOf(doc.errors, 0)
+  });
+
+  test('should contain spaces between items', function () {
+    const seq = `tags:
+  - email
+  `;
+    const mapping = `
+newTags:
+  whatever: false
+  `;
+    const input = seq + mapping;
+    const doc = YAML.safeLoad(input) as YamlMap;
+
+    assert.equal(doc.endPosition, input.length);
+    assert.equal(doc.mappings[0].endPosition, seq.length);
+    assert.equal(doc.mappings[1].endPosition, input.length);
+    assert.isTrue(doc.mappings[0].endPosition < doc.mappings[1].startPosition);
+
+    assert.lengthOf(doc.errors, 0)
   });
 });
 
