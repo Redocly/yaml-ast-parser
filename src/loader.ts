@@ -408,8 +408,11 @@ function storeMappingPair(
   mapping.parent = _result;
   keyNode.parent = mapping;
 
-  if (valueNode != null) {
-      valueNode.parent = mapping;
+  if (valueNode == null) {
+    // due to shifting in `ast.newMapping` function
+    mapping.endPosition = keyNode.endPosition;
+  } else {
+    valueNode.parent = mapping;
   }
 
   !state.ignoreDuplicateKeys && _result.mappings.forEach(sibling => {
@@ -495,10 +498,6 @@ function skipSeparationSpace(state:State, allowComments, nodeIndent, toEndBlock 
     }
 
     if (is_EOL(ch)) {
-      if (toEndBlock && -1 !== nodeIndent && state.lineIndent < nodeIndent) {
-        state.position -= state.lineIndent;
-        break;
-      }
       readLineBreak(state);
 
       ch = state.input.charCodeAt(state.position);
@@ -664,6 +663,7 @@ function readPlainScalar(state:State, nodeIndent, withinFlowCollection) {
 
   if (state.result.startPosition!=-1) {
     state_result.rawValue = state.input.substring(state_result.startPosition, state_result.endPosition);
+    state.result.endPosition = skipSeparationSpace(state, false, -1) ? state.position - 1 : state.position;
     return true;
   }
 
@@ -1110,6 +1110,7 @@ function readBlockSequence(state:State, nodeIndent) {
     state.position++;
 
     if (skipSeparationSpace(state, true, -1)) {
+      // have line breaks
       if (state.lineIndent <= nodeIndent) {
         _result.items.push(null);
         ch = state.input.charCodeAt(state.position);
@@ -1124,8 +1125,7 @@ function readBlockSequence(state:State, nodeIndent) {
       _result.items.push(state.result);
     }
 
-    skipSeparationSpace(state, true, nodeIndent, true);
-    _result.endPosition = state.position - 1;
+    _result.endPosition = skipSeparationSpace(state, true, nodeIndent, true) ? state.position - 1 : state.position;
 
     ch = state.input.charCodeAt(state.position);
 
@@ -1135,6 +1135,7 @@ function readBlockSequence(state:State, nodeIndent) {
       break;
     }
   }
+
   if (detected) {
     state.tag = _tag;
     state.anchor = _anchor;
@@ -1142,7 +1143,7 @@ function readBlockSequence(state:State, nodeIndent) {
     state.result = _result;
     return true;
   }
-  _result.endPosition=state.position
+
   return false;
 }
 
@@ -1273,22 +1274,34 @@ function readBlockMapping(state:State, nodeIndent, flowIndent) {
     // Common reading code for both explicit and implicit notations.
     //
     if (state.line === _line || state.lineIndent > nodeIndent) {
+      // mapping value on the same line or inside the node
+      const lineBeforeValue = state.line;
+      
       if (composeNode(state, nodeIndent, CONTEXT_BLOCK_OUT, true, allowCompact)) {
-        if (state.lineIndent && nodeIndent && state.lineIndent >= nodeIndent) {
-          skipSeparationSpace(state, true, nodeIndent, true);
-          state.result.endPosition = state.position - 1;
-        }
+        skipSeparationSpace(state, true, nodeIndent);
+
         if (atExplicitKey) {
           keyNode = state.result;
         } else {
           valueNode = state.result;
+          // `skipSeparationSpace` and `composeNode` could change `state.line` so check again if we are still on the same line
+          valueNode.endPosition = state.line === lineBeforeValue ? state.position : state.position - 1;
         }
+      } else {
+        // we dont have a value yet
+        // keyNode.endPosition = state.line === lineBeforeValue ? state.position : state.position - 1;
       }
 
+
       if (!atExplicitKey) {
-        if (keyNode?.endPosition) keyNode.endPosition = state.position - 1;
-        if (valueNode?.endPosition) valueNode.endPosition = state.position - 1;
         storeMappingPair(state, _result, keyTag, keyNode, valueNode, nodeIndent);
+
+        if (!valueNode) {
+          const endPosition = state.line === lineBeforeValue ? state.position : state.position - 1;
+          _result.endPosition = endPosition;
+          _result.mappings[_result.mappings.length - 1].endPosition = endPosition;
+        }
+
         keyTag = keyNode = valueNode = null;
       }
 
