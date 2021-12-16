@@ -267,6 +267,31 @@ servers:
   });
 });
 
+test.only('should not throw when multiline invalid mapping key', function () {
+  const input = `
+test: 
+  - firstlevel: val
+    sdsds: v
+    %%%
+  - second: val
+responses:
+  '405':
+    description: Invalid input
+security:
+  `;
+
+  let err;
+
+  try {
+    const doc = YAML.safeLoad(input) as YamlMap
+    console.log(doc);
+  } catch (e) {
+    err = e;
+  }
+
+  assert.equal(err, undefined);  
+});
+
 suite('Loading multiple documents', () => {
     test('should work with document-end delimiters', function () {
         const docs = []

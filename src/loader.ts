@@ -1289,19 +1289,15 @@ function readBlockMapping(state:State, nodeIndent, flowIndent) {
         }
       } else {
         // we dont have a value yet
-        // keyNode.endPosition = state.line === lineBeforeValue ? state.position : state.position - 1;
+        if (keyNode) {
+          // we dont have a keyNode when yaml is invalid (e.g. when colon is missed after field)
+          keyNode.endPosition = state.line === lineBeforeValue ? state.position : state.position - 1;
+        }
       }
 
 
       if (!atExplicitKey) {
         storeMappingPair(state, _result, keyTag, keyNode, valueNode, nodeIndent);
-
-        if (!valueNode) {
-          const endPosition = state.line === lineBeforeValue ? state.position : state.position - 1;
-          _result.endPosition = endPosition;
-          _result.mappings[_result.mappings.length - 1].endPosition = endPosition;
-        }
-
         keyTag = keyNode = valueNode = null;
       }
 
