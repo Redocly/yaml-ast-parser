@@ -43,5 +43,6 @@ jobs:
 
       # Publish to npm
     - run: npm publish --access public
+      if: ${{ success() }}
       env:
         NODE_AUTH_TOKEN: ${{secrets.NPM_TOKEN}}
