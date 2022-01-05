@@ -87,7 +87,7 @@ foo: bar`;
   test('should not contain spaces', function () {
     const input = `tags:
   - email
- 
+  
  
  
  
@@ -103,9 +103,13 @@ foo: bar`;
                     YAML.newScalar('tags'),
                     seq)]);
 
+    const docSeq = <YAML.YAMLSequence>doc.mappings[0].value;
+    
     assert.equal(doc.endPosition, input.length);
     assert.equal(doc.mappings[0].startPosition, 0);
-    assert.equal(doc.mappings[0].endPosition, 15);
+    assert.equal(docSeq.items[0].endPosition, input.length);
+    assert.equal(docSeq.endPosition, input.length);
+    assert.equal(doc.mappings[0].endPosition, input.length);
 
     assert.deepEqual(structure(doc), expected_structure)
     assert.lengthOf(doc.errors, 0)
@@ -142,9 +146,150 @@ newTags:
     assert.equal(doc.mappings[0].endPosition, seq.length);
     assert.equal(doc.mappings[1].endPosition, input.length);
     assert.isTrue(doc.mappings[0].endPosition < doc.mappings[1].startPosition);
+    
+    assert.lengthOf(doc.errors, 0);
+  });
+
+  test('mapping values must end 1 character before next mapping starts', () => {
+    const input = `
+openapi: 3.1.0
+servers: 
+  - url:  anything
+    description: some description
+  - url: //petstore.swagger.io/sandbox
+    description: Sandbox server
+    variables: 
+      varName: default
+`;
+    const doc = YAML.safeLoad(input) as YamlMap;
+    const [openApiMapping, serversMapping] = doc.mappings;
+    const docSeq = <YAML.YAMLSequence>doc.mappings[1].value;
+    const [firstMap, secondMap] = <YAML.YamlMap[]>docSeq.items;
+    
+    assert.equal(doc.endPosition, input.length);
+    
+    assert.equal(openApiMapping.startPosition, 1);
+    assert.equal(openApiMapping.endPosition, 15);
+
+    assert.equal(serversMapping.startPosition, 16);
+    assert.equal(serversMapping.endPosition, input.length - 1);
+
+    assert.equal(firstMap.mappings[0].endPosition, 48);
+    assert.equal(firstMap.mappings[1].endPosition, 80);
+
+    assert.equal(secondMap.mappings[0].endPosition, 121);
+    assert.equal(secondMap.mappings[1].endPosition, 153);
+
+    assert.equal(secondMap.mappings[2].startPosition, 154);
+    assert.equal(secondMap.mappings[2].endPosition, input.length - 1);
+
+    const variablesMap = <YAML.YamlMap>secondMap.mappings[2].value;
+
+    assert.equal(variablesMap.startPosition, 172);
+    assert.equal(variablesMap.mappings[0].startPosition, 172);
+    assert.equal(variablesMap.mappings[0].endPosition, input.length - 1);
+  });
+
+  test('mapping with multiline value must end at the end of document', () => {
+    const input = `
+mapping: |
+  some 
+  multiline value
+  ends
+  here`;
+
+    const doc = YAML.safeLoad(input) as YamlMap;
+    const [mapping] = doc.mappings;
+
+    assert.equal(mapping.endPosition, input.length);
+    assert.equal(mapping.value.endPosition, input.length);
+  });
+
+  test('every scalar value in sequence must end 1 character before next sequence item starts', () => {
+    const input = `
+enum:
+  - clueless
+  - lazy
+  - adventurous
+  - aggressive
+  - |
+    multiline
+    string
+    should work
+`;
+        const doc = YAML.safeLoad(input) as YamlMap;
+        const [enumMapping] = doc.mappings;
+        const enumSeq = <YAML.YAMLSequence>enumMapping.value;
+        const [clueless, lazy, adventurous, aggressive, multiline] = <YAML.YamlMap[]>enumSeq.items;
+        
+        assert.equal(doc.endPosition, input.length);
+        
+        assert.equal(clueless.startPosition, 11);
+        assert.equal(clueless.endPosition, 21);
+    
+        assert.equal(lazy.startPosition, 24);
+        assert.equal(lazy.endPosition, 30);
+    
+        assert.equal(adventurous.startPosition, 33);
+        assert.equal(adventurous.endPosition, 46);
+    
+        assert.equal(aggressive.startPosition, 49);
+        assert.equal(aggressive.endPosition, 61);
+
+        assert.equal(multiline.startPosition, 64);
+        assert.equal(multiline.endPosition, 106);
+  });
+
+  test('empty mapping value should end where next mapping starts', () => {
+    const input = `
+openapi: 3.1.0
+servers: 
+  - url:     
+    description: some description
+`;
+
+    const doc = YAML.safeLoad(input) as YamlMap;
+    const [, serversMapping] = doc.mappings;
+    const docSeq = <YAML.YAMLSequence>doc.mappings[1].value;
+    const [firstMap] = <YAML.YamlMap[]>docSeq.items;
+    
+    assert.equal(doc.endPosition, input.length);
+    
+    assert.equal(serversMapping.endPosition, input.length - 1);
+    
+    assert.equal(firstMap.mappings[0].startPosition, 30);
+    assert.equal(firstMap.mappings[0].endPosition, 43);
+    
+    assert.equal(firstMap.mappings[1].startPosition, 44);
+    assert.equal(firstMap.mappings[1].endPosition, 73);
 
     assert.lengthOf(doc.errors, 0)
   });
+});
+
+test.only('should not throw when multiline invalid mapping key', function () {
+  const input = `
+test: 
+  - firstlevel: val
+    sdsds: v
+    %%%
+  - second: val
+responses:
+  '405':
+    description: Invalid input
+security:
+  `;
+
+  let err;
+
+  try {
+    const doc = YAML.safeLoad(input) as YamlMap
+    console.log(doc);
+  } catch (e) {
+    err = e;
+  }
+
+  assert.equal(err, undefined);  
 });
 
 suite('Loading multiple documents', () => {
